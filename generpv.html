@@ -1,0 +1,891 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Site de Réception des Travaux</title>
+
+<!-- Librairies PDF -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.min.js"></script>
+
+<style>
+    :root{
+        --primary:#0056b3;
+        --green:#28a745;
+        --green-dark:#218838;
+        --blue:#007bff;
+        --blue-dark:#0056b3;
+        --red:#dc3545;
+        --red-dark:#c82333;
+        --border:#ced4da;
+        --muted:#f8f9fa;
+        --bg:#f0f2f5;
+        --text:#333;
+
+        /* Modal */
+        --overlay: rgba(0,0,0,.45);
+        --card-bg:#fff;
+    }
+    body{
+        font-family: Arial, Helvetica, sans-serif;
+        background: var(--bg);
+        margin:0; padding:0; color:var(--text);
+    }
+    .container{
+        max-width: 900px;
+        margin:20px auto;
+        background:#fff;
+        border-radius:10px;
+        box-shadow:0 4px 12px rgba(0,0,0,.1);
+        padding:20px;
+    }
+    h1,h2{ color:var(--primary); text-align:center; margin:0 0 16px 0; }
+    button{
+        background: var(--green);
+        color:#fff; border:none; border-radius:8px;
+        padding:12px 20px; font-size:16px; cursor:pointer;
+        display:block; margin:10px auto; width:80%; max-width:320px;
+        transition:.2s ease;
+    }
+    button:hover{ background:var(--green-dark); transform:translateY(-2px); }
+
+    .verifyRow{ display:flex; gap:4%; width:100%; }
+    .verifyButton{ background:var(--green); width:48%; }
+    .verifyButtonWithReserve{ background:var(--red); width:48%; }
+    .verifyButtonWithReserve:hover{ background:var(--red-dark); }
+
+    input[type="date"], select, input[type="text"], textarea{
+        width:100%; padding:10px; margin:10px 0 20px 0;
+        border:1px solid var(--border); border-radius:6px; font-size:16px;
+        box-sizing:border-box;
+    }
+    textarea{ min-height:80px; resize:vertical; }
+
+    .hidden{ display:none; }
+    .step{ margin-top:20px; }
+
+    .logo-upload{
+        text-align:center; margin:0 auto 16px auto; padding:15px;
+        border:2px dashed var(--blue); border-radius:10px; max-width: 900px;
+    }
+    .logo-preview{
+        max-width:220px; max-height:110px; margin:10px auto; display:none;
+        border:1px solid #ddd; padding:6px; border-radius:6px; background:#fff;
+    }
+    .logo-controls{
+        display:flex; gap:12px; justify-content:center; align-items:center; margin-top:10px;
+    }
+    .size-btn{
+        background:var(--blue); color:#fff; border:none; width:42px; height:42px; border-radius:50%;
+        cursor:pointer; transition:.2s; box-shadow:0 2px 5px rgba(0,0,0,.2);
+        display:flex; align-items:center; justify-content:center; font-size:20px; font-weight:bold;
+    }
+    .size-btn:hover{ background:var(--blue-dark); transform:scale(1.08); }
+    #sizeDisplay{
+        font-family: "Courier New", monospace; font-weight:bold; font-size:18px;
+        min-width:62px; text-align:center; color:#333; background:#f8f9fa;
+        padding:6px 10px; border-radius:6px; border:1px solid #dee2e6;
+    }
+
+    #presenceListContainer .presence-item{
+        background:#fff; border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:8px;
+        display:flex; justify-content:space-between; gap:12px; align-items:center;
+    }
+    .presence-item strong{ color:#111; }
+    .presence-remove{ color:var(--red); cursor:pointer; font-weight:bold; font-size:18px; }
+    .presence-remove:hover{ color:var(--red-dark); }
+
+    /* Styles des statuts de vérification (comme avant) */
+    .verifier{
+        margin-top:15px; display:flex; flex-direction:column; align-items:flex-start;
+        border:1px solid var(--border); border-radius:8px; background:var(--muted); padding:15px;
+    }
+    .verifier label{ font-weight:bold; margin-bottom:10px; }
+    .verification-status{ margin-top:10px; font-size:18px; display:flex; align-items:center; gap:6px; }
+    .status-verified{ color:var(--green); font-weight:bold; }
+    .status-with-reserve{ color:var(--red); font-weight:bold; }
+    .reserveInput{
+        width:100%; margin-top:10px; padding:8px; border:1px solid var(--border); border-radius:6px; display:none;
+    }
+
+    #pvReserves .reserve-item{
+        background:#fff; border:1px solid var(--border); border-radius:8px; padding:10px 12px; margin-bottom:10px;
+        position:relative;
+    }
+    .reserve-remove{
+        position:absolute; right:10px; top:10px; cursor:pointer; color:var(--red); font-weight:bold; font-size:18px;
+    }
+    .reserve-remove:hover{ color:var(--red-dark); }
+
+    #pdfImages { display:flex; flex-direction:column; align-items:center; gap:20px; }
+    #pdfImages img{ width:100%; height:auto; border:1px solid #ddd; border-radius:8px; }
+    @media (min-width:768px){ #pdfImages img{ width:75%; } }
+    @media (min-width:1024px){ #pdfImages img{ width:60%; } }
+
+    .start-grid{
+        display:grid; grid-template-columns:1fr; gap:12px; margin-bottom:10px;
+    }
+    @media (min-width:640px){
+        .start-grid{ grid-template-columns:1fr 1fr; }
+    }
+
+    /* Modal (popup) */
+    .modal-overlay{
+        position:fixed; inset:0; background:var(--overlay);
+        display:flex; align-items:center; justify-content:center;
+        z-index:9999;
+    }
+    /* >>> Corrige le conflit : quand .hidden est présent, on force l'affichage à none */
+    .modal-overlay.hidden{ display:none !important; }
+
+    .modal{
+        width:min(440px, 92vw);
+        background:var(--card-bg);
+        border-radius:14px;
+        box-shadow:0 15px 40px rgba(0,0,0,.25);
+        padding:22px 20px;
+        border:1px solid #e5e7eb;
+        animation:pop .16s ease-out;
+    }
+    .modal h3{
+        margin:0 0 10px 0; text-align:center; color:#0f172a;
+        font-size:20px;
+    }
+    .modal .stats{
+        display:flex; gap:14px; justify-content:center; margin:14px 0 4px 0;
+    }
+    .kpi{
+        flex:1; background:#f8fafc; border:1px solid #e2e8f0; border-radius:10px; padding:14px 10px; text-align:center;
+    }
+    .kpi .num{
+        font-size:28px; font-weight:800; line-height:1; margin-bottom:6px;
+    }
+    .kpi.ok .num{ color:var(--green); }
+    .kpi.warn .num{ color:var(--red); }
+    .modal .actions{ display:flex; justify-content:center; margin-top:14px; }
+    .modal .btn{
+        background:var(--blue); padding:10px 18px; border-radius:8px; color:#fff; border:none; cursor:pointer; font-weight:600;
+    }
+    .modal .btn:hover{ background:var(--blue-dark); }
+
+    @keyframes pop{
+        from{ transform:scale(.96); opacity:.8; }
+        to{ transform:scale(1); opacity:1; }
+    }
+
+    @media (max-width:600px){
+        .container{ margin:10px; padding:15px; }
+        button{ width:100%; max-width:none; }
+        .verifyRow{ flex-direction:column; gap:10px; }
+        .verifyButton, .verifyButtonWithReserve{ width:100%; }
+    }
+</style>
+</head>
+
+<body onload="loadData()">
+    <div class="container">
+        <!-- Logo -->
+        <div class="logo-upload">
+            <h2 style="margin-bottom:10px">Logo du Rapport</h2>
+            <input type="file" id="logoInput" accept="image/*" />
+            <img id="logoPreview" class="logo-preview" alt="Aperçu du logo"/>
+            <div class="logo-controls">
+                <button class="size-btn" type="button" onclick="adjustLogoSize(-0.1)">−</button>
+                <span id="sizeDisplay">100%</span>
+                <button class="size-btn" type="button" onclick="adjustLogoSize(0.1)">+</button>
+            </div>
+        </div>
+
+        <h1>Bienvenue dans le Système de Réception</h1>
+
+        <!-- Accueil : deux parcours -->
+        <div id="startPanel" class="start-grid">
+            <button id="startPVButton" type="button">Commencer le PV de réception</button>
+            <button id="startVerifyButton" type="button">Commencer les vérifications</button>
+        </div>
+
+        <!-- Étape 1 : Date (+ Nom projet pour PV) -->
+        <div id="daySelection" class="hidden step">
+            <h2>Choisissez le jour de votre inspection</h2>
+            <div id="projectNameWrap" class="hidden">
+                <label for="projectName"><strong>Nom du projet</strong></label>
+                <input type="text" id="projectName" placeholder="Ex : Construction d’un immeuble R+4"/>
+            </div>
+            <label for="inspectionDate"><strong>Date de l’intervention</strong></label>
+            <input type="date" id="inspectionDate" required/>
+            <button id="continueDayButton" type="button">Continuer</button>
+        </div>
+
+        <!-- Étape 2 : Élément + (Présence pour PV seulement) -->
+        <div id="elementSelection" class="hidden step">
+            <h2 id="elementSelectionTitle">Qu'allez-vous réceptionner ce jour ?</h2>
+
+            <select id="constructionElement">
+                <option value="">Sélectionnez un élément</option>
+                <option value="fondations">Fondations / Semelles</option>
+                <option value="poteaux">Poteaux</option>
+                <option value="poutres">Poutres</option>
+                <option value="plancher">Plancher</option>
+                <option value="escaliers">Escaliers</option>
+                <option value="ascenseur">Ascenseur</option>
+                <option value="maconnerie">Maçonnerie</option>
+            </select>
+
+            <!-- Nom de l'élément (PV seulement) -->
+            <div id="elementNameWrap">
+                <input type="text" id="elementName" placeholder="Entrez le nom de l'élément"/>
+            </div>
+
+            <!-- Présence : PV uniquement -->
+            <div id="presenceSection">
+                <h2>Présence sur site</h2>
+                <div id="presenceContainer">
+                    <label for="presenceName">Nom :</label>
+                    <input type="text" id="presenceName" placeholder="Nom de la personne présente"/>
+                    <label for="presenceRole">Rôle :</label>
+                    <input type="text" id="presenceRole" placeholder="Rôle de la personne"/>
+                    <button id="addPresenceButton" type="button">Ajouter</button>
+                </div>
+                <div id="presenceListContainer"></div>
+            </div>
+
+            <button id="continueElementButton" type="button">Continuer</button>
+        </div>
+
+        <!-- Étape 3 : Section finale -->
+        <div id="verificationSection" class="hidden step">
+            <h2 id="verificationHeader">Vérifications</h2>
+
+            <!-- PV : Réserves ajoutables -->
+            <div id="pvReserves" class="hidden">
+                <h2>Réserves</h2>
+                <button id="addReserveBtn" type="button" style="max-width:240px;">Ajouter une réserve</button>
+                <div id="reservesList"></div>
+            </div>
+
+            <!-- Liste de vérification (style original) -->
+            <div id="verificationTasks"></div>
+
+            <!-- Zone Photos + PDF (PV uniquement) -->
+            <div id="mediaAndPdf" class="hidden">
+                <h2 style="margin-top:24px">Ajoutez des photos</h2>
+                <input type="file" id="photo1" accept="image/*">
+                <input type="text" id="caption1" placeholder="Légende photo 1">
+                <input type="file" id="photo2" accept="image/*">
+                <input type="text" id="caption2" placeholder="Légende photo 2">
+                <input type="file" id="photo3" accept="image/*">
+                <input type="text" id="caption3" placeholder="Légende photo 3">
+                <input type="file" id="photo4" accept="image/*">
+                <input type="text" id="caption4" placeholder="Légende photo 4">
+
+                <button id="generatePdfButton" type="button">Générer le PDF</button>
+                <button id="previewPdfButton" type="button" style="display:none;">Aperçu du PDF</button>
+                <button id="downloadPdfButton" type="button" style="display:none;">Télécharger le PDF</button>
+            </div>
+
+            <!-- Bouton fin vérifications -->
+            <button id="finishVerifyButton" type="button" class="hidden">OK</button>
+        </div>
+
+        <!-- Aperçu PDF -->
+        <div id="pdfPreview" class="hidden step">
+            <h2>Aperçu du PDF</h2>
+            <div id="pdfImages"></div>
+        </div>
+    </div>
+
+    <!-- MODAL récapitulatif vérifs -->
+    <div id="summaryModal" class="modal-overlay hidden">
+        <div class="modal">
+            <h3>Résumé des vérifications</h3>
+            <div class="stats">
+                <div class="kpi ok">
+                    <div class="num" id="kpiSans">0</div>
+                    <div>Sans réserve</div>
+                </div>
+                <div class="kpi warn">
+                    <div class="num" id="kpiAvec">0</div>
+                    <div>Avec réserve</div>
+                </div>
+            </div>
+            <div class="actions">
+                <button id="summaryOkBtn" class="btn" type="button">OK</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+/* ===== Helpers DOM sûrs ===== */
+const $ = (id)=>document.getElementById(id);
+const hide = (id)=>{ const el=$(id); if(el) el.classList.add('hidden'); };
+const show = (id)=>{ const el=$(id); if(el) el.classList.remove('hidden'); };
+
+/* =========================
+   MODE & CONFIG
+   ========================= */
+let mode = null; // 'pv' | 'verify'
+let logoScale = 1.0; // 1.0 = 100%
+const STORAGE_KEY = 'receptionConfig';
+
+/* =========================
+   LOGO
+   ========================= */
+function saveLogoConfig(dataUrl){
+    const existing = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    const payload = { ...existing, logo: (typeof dataUrl === 'string' ? dataUrl : existing.logo) || '', logoScale };
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+}
+function adjustLogoSize(delta){
+    logoScale = Math.max(0.5, Math.min(2.0, logoScale + delta));
+    $('sizeDisplay').textContent = Math.round(logoScale*100)+'%';
+    saveLogoConfig();
+}
+function previewLogo(ev){
+    const file = ev.target.files?.[0];
+    const img = $('logoPreview');
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = e=>{ img.src = e.target.result; img.style.display = 'block'; saveLogoConfig(e.target.result); };
+    reader.readAsDataURL(file);
+}
+function loadData(){
+    const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+    if(data.logo){ const img=$('logoPreview'); img.src=data.logo; img.style.display='block'; }
+    if(typeof data.logoScale==='number'){ logoScale=data.logoScale; $('sizeDisplay').textContent=Math.round(logoScale*100)+'%'; }
+}
+
+/* =========================
+   ACCUEIL & ÉTAPES
+   ========================= */
+$('logoInput').addEventListener('change', previewLogo);
+
+function clearEl(id){
+    const el = $(id); if(!el) return;
+    if(el.tagName==='INPUT' || el.tagName==='TEXTAREA') el.value='';
+    else el.innerHTML='';
+}
+
+/* --- Reset d’étapes sûr --- */
+function resetCommonAfterStart(){
+    // masquer toutes les sections
+    ['daySelection','elementSelection','verificationSection','pdfPreview'].forEach(hide);
+    // nettoyer contenus
+    ['presenceListContainer','verificationTasks','reservesList'].forEach(clearEl);
+    ['photo1','photo2','photo3','photo4','caption1','caption2','caption3','caption4'].forEach(id=>{
+        const el=$(id); if(!el) return; el.value='';
+    });
+    if($('previewPdfButton')) $('previewPdfButton').style.display='none';
+    if($('downloadPdfButton')) $('downloadPdfButton').style.display='none';
+    hide('mediaAndPdf'); hide('finishVerifyButton'); hide('pvReserves');
+}
+
+/* --- Boutons d’accueil --- */
+$('startPVButton').addEventListener('click', ()=>{
+    mode = 'pv';
+    hide('startPanel');                 // les deux boutons disparaissent
+    resetCommonAfterStart();
+    show('daySelection');
+    show('projectNameWrap');
+    $('elementSelectionTitle').innerText = "Qu'allez-vous réceptionner ce jour ?";
+    show('presenceSection');
+    show('elementNameWrap');            // nom d’élément demandé en PV
+});
+
+$('startVerifyButton').addEventListener('click', ()=>{
+    mode = 'verify';
+    hide('startPanel');                 // les deux boutons disparaissent
+    resetCommonAfterStart();
+    hide('daySelection');               // pas de date en vérif
+    $('elementSelectionTitle').innerText = "Quel élément voulez-vous vérifier ?";
+    hide('presenceSection');            // pas de présence en vérif
+    hide('elementNameWrap');            // pas de nom d’élément en vérif
+    show('elementSelection');           // on choisit directement l’élément
+});
+
+/* --- Étape PV : continuer après la date --- */
+$('continueDayButton').addEventListener('click', ()=>{
+    const d = $('inspectionDate').value;
+    if(d){ show('elementSelection'); hide('daySelection'); }
+    else{ alert('Veuillez sélectionner une date pour continuer.'); }
+});
+
+/* --- Gestion présences (PV) --- */
+$('addPresenceButton').addEventListener('click', ()=>{
+    const name = $('presenceName').value.trim();
+    const role = $('presenceRole').value.trim();
+    if(!name || !role){ alert("Veuillez saisir le nom et le rôle."); return; }
+    const wrap = document.createElement('div');
+    wrap.className = 'presence-item';
+    wrap.innerHTML = `<div><strong>${name}</strong> — <span>${role}</span></div><span class="presence-remove" title="Supprimer">×</span>`;
+    wrap.querySelector('.presence-remove').onclick = ()=> wrap.remove();
+    $('presenceListContainer').appendChild(wrap);
+    $('presenceName').value=''; $('presenceRole').value='';
+});
+
+/* --- Étape Élément : PV vs Vérifs --- */
+$('continueElementButton').addEventListener('click', ()=>{
+    const element = $('constructionElement').value;
+    const elementName = ($('elementName').value || '').trim();
+
+    if(mode === 'pv'){
+        if(!(element && elementName)){
+            alert('Veuillez sélectionner un élément et saisir son nom.'); return;
+        }
+    }else{
+        if(!element){
+            alert('Veuillez sélectionner un élément à vérifier.'); return;
+        }
+    }
+
+    hide('elementSelection');
+    show('verificationSection');
+
+    if(mode === 'pv'){
+        $('verificationHeader').innerText = 'Réserves';
+        show('pvReserves'); show('mediaAndPdf'); hide('finishVerifyButton');
+        $('verificationTasks').innerHTML = ''; // pas de liste de vérifs en PV
+    }else{
+        $('verificationHeader').innerText = 'Vérifications';
+        $('verificationTasks').innerHTML = buildVerifyPage(element); // style original cumulé
+        hide('mediaAndPdf'); hide('pvReserves'); show('finishVerifyButton'); // pas de photos/PDF en vérif
+    }
+});
+
+/* =========================
+   PV : Réserves ajoutables
+   ========================= */
+$('addReserveBtn')?.addEventListener('click', ()=>{
+    const box = document.createElement('div');
+    box.className = 'reserve-item';
+    box.innerHTML = `
+        <textarea class="reserve-text" placeholder="Décrire la réserve à lever..."></textarea>
+        <span class="reserve-remove" title="Supprimer">×</span>
+    `;
+    box.querySelector('.reserve-remove').onclick = ()=> box.remove();
+    $('reservesList').appendChild(box);
+});
+
+/* =========================
+   Vérifications - blocs (STYLE ORIGINAL)
+   ========================= */
+function verifyBlockHTML(label, task){
+    return `
+        <div class="verifier">
+            <label>${label}</label>
+            <div class="verifyRow">
+                <button class="verifyButton" data-task="${task||''}" type="button">Vérifié sans réserve</button>
+                <button class="verifyButtonWithReserve" data-task="${task||''}" type="button">Vérifié avec réserve</button>
+            </div>
+            <input type="text" class="reserveInput" placeholder="Entrez la réserve (obligatoire si réserve)"/>
+            <div class="verification-status"></div>
+        </div>
+    `;
+}
+
+/* Reprend la logique “comme avant” pour chaque tâche */
+function getVerificationTasks(elementKey, task){
+    const block = (label)=>verifyBlockHTML(label, task);
+
+    let html = '';
+    if(task==='coffrage'){
+        if(elementKey==='poteaux'){
+            html+=`<h2>Conformité aux Plans</h2>
+                ${block('Dimensions du poteau (section)')}
+                ${block('Hauteur du poteau')}
+                ${block('Position et alignement du poteau sur le chantier')}
+                <h2>Matériaux de Coffrage</h2>
+                ${block('Qualité des panneaux/coffrages')}
+                ${block('Étanchéité du coffrage')}
+                <h2>Alignement & Nivellement</h2>
+                ${block('Verticalité du coffrage')}
+                ${block('Écartement et alignement des panneaux')}
+                <h2>Enrobage de l’armature</h2>
+                ${block('Espace coffrage/armature suffisant')}
+                ${block('Présence de cales/distanciers (≥ 2.5 cm)')}
+            `;
+        }else{
+            html+=`${block('Dimensions conformes')}
+                   ${block('Alignement conforme')}`;
+        }
+    }
+    if(task==='ferraillage'){
+        if(elementKey==='poteaux'){
+            html+=`<h2>Armature Longitudinale</h2>
+                ${block('Diamètre des barres longitudinales')}
+                ${block('Nombre de barres longitudinales')}
+                ${block('Positionnement correct des barres')}
+                ${block('Recouvrements / continuités')}
+                ${block('Déformation des barres')}
+                <h2>Armature Transversale (Étriers)</h2>
+                ${block('Diamètre des étriers')}
+                ${block('Nombre des étriers')}
+                ${block('Espacement des étriers')}
+                ${block('Serrage des nœuds')}
+                <h2>Positionnement Général</h2>
+                ${block('Alignement / verticalité')}
+                ${block('Chaises / maintien')}
+                ${block('Enrobage')}
+                ${block('Renforts supplémentaires si prévus')}
+            `;
+        }else{
+            html+=`${block('Sections et diamètres conformes')}
+                   ${block('Espacements conformes')}`;
+        }
+    }
+    if(task==='coulage'){
+        if(elementKey==='poteaux'){
+            html+=`<h2>Coulage du Béton</h2>
+                ${block('Coulage continu sans joints non prévus')}
+                ${block('Remplissage progressif (limite la ségrégation')}
+                ${block('Hauteur de chute ≤ 1.5 m')}
+                ${block('Consignes reprises bétonnage respectées')}
+                <h2>Vibrage & Compactage</h2>
+                ${block('Vibrage efficace, pas de poches d’air')}
+                ${block('Surface après vibrage sans laitance excessive')}
+                <h2>Finitions Supérieures</h2>
+                ${block('Absence de laitance en surface')}
+                ${block('Niveau de tête conforme')}
+                ${block('Finition correcte pour reprise')}
+                <h2>Cure & Protection</h2>
+                ${block('Protection immédiate (cure)')}
+                ${block('Durée de cure adaptée')}
+            `;
+        }else{
+            html+=`${block('Coulage continu / consignes respectées')}
+                   ${block('Vibrage et cure conformes')}`;
+        }
+    }
+    return html;
+}
+
+/* Page vérifs : on affiche Coffrage + Ferraillage + Coulage d’un coup */
+function buildVerifyPage(elementKey){
+    return [
+        getVerificationTasks(elementKey,'coffrage'),
+        getVerificationTasks(elementKey,'ferraillage'),
+        getVerificationTasks(elementKey,'coulage')
+    ].join('');
+}
+
+/* Clics sur vérifs */
+$('verificationTasks').addEventListener('click', (ev)=>{
+    const btn = ev.target;
+    if(btn.classList.contains('verifyButton') || btn.classList.contains('verifyButtonWithReserve')){
+        const wrap = btn.closest('.verifier');
+        const status = wrap.querySelector('.verification-status');
+        const reserve = wrap.querySelector('.reserveInput');
+        const isReserve = btn.classList.contains('verifyButtonWithReserve');
+
+        if(isReserve){
+            reserve.style.display = 'block'; reserve.focus();
+            status.textContent = '⚠️ Vérifié avec réserve';
+            status.classList.remove('status-verified'); status.classList.add('status-with-reserve');
+        }else{
+            reserve.value = ''; reserve.style.display = 'none';
+            status.textContent = '✅ Vérifié sans réserve';
+            status.classList.remove('status-with-reserve'); status.classList.add('status-verified');
+        }
+        wrap.querySelector('.verifyRow').style.display = 'none';
+    }
+});
+
+/* ===== Modal résumé (beau popup) ===== */
+function openSummaryModal(sans, avec){
+    $('kpiSans').textContent = sans;
+    $('kpiAvec').textContent = avec;
+    show('summaryModal');
+}
+$('summaryOkBtn').addEventListener('click', ()=>{
+    hide('summaryModal');
+    goHome();
+});
+
+/* Fin vérifs → popup stats puis retour accueil */
+$('finishVerifyButton').addEventListener('click', ()=>{
+    const stats = { sans:0, avec:0 };
+    document.querySelectorAll('#verificationTasks .verifier .verification-status').forEach(s=>{
+        if(s.classList.contains('status-verified')) stats.sans++;
+        else if(s.classList.contains('status-with-reserve')) stats.avec++;
+    });
+    openSummaryModal(stats.sans, stats.avec);
+});
+
+function goHome(){
+    mode = null;
+    show('startPanel'); // les deux boutons ne réapparaissent qu’à l’accueil
+    ['daySelection','elementSelection','verificationSection','pdfPreview'].forEach(hide);
+}
+
+/* =========================
+   GÉNÉRATION PDF (PV uniquement)
+   ========================= */
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.10.377/pdf.worker.min.js';
+let generatedPdfBlob = null;
+
+function formatDateFR(dateString){
+    const d = new Date(dateString);
+    return d.toLocaleDateString('fr-FR', { day:'numeric', month:'long', year:'numeric' });
+}
+
+$('generatePdfButton').addEventListener('click', async ()=>{
+    if(mode !== 'pv') return;
+    const date = $('inspectionDate').value;
+    const elementKey = $('constructionElement').value;
+    const elementName = $('elementName').value.trim();
+    const projectName = ($('projectName').value.trim() || '');
+
+    if(!date || !elementKey || !elementName){
+        alert("Veuillez compléter la date, l'élément et son nom avant de générer.");
+        return;
+    }
+
+    // Réserves PV
+    const pvReserveList = [];
+    document.querySelectorAll('#reservesList .reserve-text').forEach(t=>{
+        const txt = t.value.trim(); if(txt) pvReserveList.push(txt);
+    });
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ format:'a4', unit:'mm', compress:true });
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const margin = 20, bottomMargin = 25;
+
+    // Logo + filigrane
+    let contentStartY = 28;
+    try{
+        const cfg = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+        if(cfg.logo){
+            const logoImg = new Image();
+            await new Promise((res,rej)=>{ logoImg.onload=res; logoImg.onerror=rej; logoImg.src = cfg.logo; });
+
+            const baseW = 40;
+            const w = baseW * (cfg.logoScale || 1.0);
+            const h = w * (logoImg.height / logoImg.width);
+            const x = (pageWidth - w)/2;
+            const yLogo = 13;
+            doc.addImage(logoImg, 'PNG', x, yLogo, w, h);
+
+            const wm = 80 * (cfg.logoScale || 1.0);
+            const xw = (pageWidth - wm)/2;
+            const yw = (pageHeight - wm)/2;
+            doc.setGState(new doc.GState({ opacity: 0.08 }));
+            doc.addImage(logoImg, 'PNG', xw, yw, wm, wm);
+            doc.setGState(new doc.GState({ opacity: 1 }));
+
+            contentStartY = Math.round(yLogo + h) + 2;
+        }
+    }catch(e){ console.warn('Logo non chargé pour le PDF :', e); }
+
+    // Cadre
+    doc.setLineWidth(0.1);
+    doc.rect(10, 10, pageWidth-20, pageHeight-20);
+
+    // Titres
+    doc.setFont("Times","bold");
+    doc.setFontSize(16);
+    doc.text("Réception de Travaux", pageWidth/2, contentStartY, {align:'center'});
+
+    let yHead = contentStartY + 8;
+    if(projectName){
+        doc.setFont("Times","normal");
+        doc.setFontSize(12);
+        doc.text(projectName, pageWidth/2, yHead, {align:'center'});
+        yHead += 8;
+    }
+
+    doc.setFont("Times","italic");
+    doc.setFontSize(12);
+    doc.text("PV de visite de chantier", pageWidth/2, yHead, {align:'center'});
+    yHead += 8;
+
+    doc.setFont("Times","normal");
+    doc.text(`Date : ${formatDateFR(date)}`, pageWidth/2, yHead, {align:'center'});
+
+    // Ligne
+    doc.setDrawColor(180);
+    doc.setLineWidth(0.2);
+    doc.line(margin, yHead + 6, pageWidth - margin, yHead + 6);
+
+    // Élément
+    let y = yHead + 14;
+    doc.setFont("Times","bold"); doc.setFontSize(12);
+    doc.text("Élément :", margin, y);
+
+    doc.setFont("Times","normal");
+    const elementLabelMap = {
+        fondations:'Fondations / Semelles',
+        poteaux:'Poteaux',
+        poutres:'Poutres',
+        plancher:'Plancher',
+        escaliers:'Escaliers',
+        ascenseur:'Ascenseur',
+        maconnerie:'Maçonnerie'
+    };
+    const elementFull = `${elementLabelMap[elementKey]} — ${elementName}`;
+    const elementLines = doc.splitTextToSize(elementFull, pageWidth - margin*2 - 25);
+    doc.text(elementLines, margin+25, y);
+    y += elementLines.length*6 + 6;
+
+    // Présences
+    doc.setFont("Times","bold"); doc.setTextColor(40,40,40);
+    doc.text("Étaient présents :", margin, y);
+    doc.setDrawColor(200,200,200); doc.line(margin, y+2, pageWidth - margin, y+2);
+    y += 8; doc.setFont("Times","normal"); doc.setTextColor(0,0,0);
+
+    const presences = Array.from(document.querySelectorAll('#presenceListContainer .presence-item'))
+        .map(div=>{
+            const t = div.querySelector('div')?.innerText || '';
+            const [name, role] = t.split(' — ').map(s=>s.trim());
+            return {name, role};
+        });
+
+    if(presences.length === 0){
+        doc.text("— Aucune présence saisie —", margin, y); y+=8;
+    }else{
+        presences.forEach(p=>{
+            doc.text(p.name || '', margin, y);
+            doc.text(p.role || '', pageWidth - margin, y, {align:'right'});
+            y+=7;
+            if(y > pageHeight - bottomMargin){ doc.addPage(); doc.rect(10,10,pageWidth-20,pageHeight-20); y=20; }
+        });
+    }
+
+    // Réserves
+    y += 6; doc.setFont("Times","bold"); doc.text("Réserves à lever :", margin, y);
+    doc.setDrawColor(200,200,200); doc.line(margin, y+2, pageWidth - margin, y+2);
+    y += 8; doc.setFont("Times","normal");
+    const contentWidth = pageWidth - margin*2;
+
+    if(pvReserveList.length === 0){
+        doc.text("— Aucune réserve saisie —", margin, y); y+=8;
+    }else{
+        pvReserveList.forEach((rTxt)=>{
+            const bullet = `- ${rTxt}`;
+            const lines = doc.splitTextToSize(bullet, contentWidth-8);
+            doc.text(lines, margin+4, y);
+            y += lines.length*6 + 2;
+            if(y > pageHeight - bottomMargin){ doc.addPage(); doc.rect(10,10,pageWidth-20,pageHeight-20); y=20; }
+        });
+    }
+
+    // Photos
+    doc.addPage(); doc.rect(10,10,pageWidth-20,pageHeight-20);
+    y = 20; doc.setFont("Times","bold"); doc.setFontSize(14);
+    doc.text("Photos du chantier", margin, y);
+    doc.setDrawColor(200,200,200); doc.line(margin, y+2, pageWidth - margin, y+2);
+    y+=12;
+
+    const photos = [
+        { file: $('photo1').files[0], caption: $('caption1').value },
+        { file: $('photo2').files[0], caption: $('caption2').value },
+        { file: $('photo3').files[0], caption: $('caption3').value },
+        { file: $('photo4').files[0], caption: $('caption4').value }
+    ];
+
+    const imageSize = 65, perRow = 2, gapH = 20, gapV = 22;
+    const rowWidth = perRow*imageSize + (perRow-1)*gapH;
+    const xStart = (pageWidth - rowWidth)/2;
+
+    async function toDataURLCompressed(file){
+        if(!file) return null;
+        const img = new Image(); const fr = new FileReader();
+        const blob = await new Promise(resolve=>{
+            fr.onload = e=>{
+                img.src = e.target.result;
+                img.onload = ()=>{
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    let w = img.width, h = img.height, max = 1000;
+                    if(w>h && w>max){ h = h*(max/w); w = max; }
+                    else if(h>=w && h>max){ w = w*(max/h); h = max; }
+                    canvas.width = w; canvas.height = h;
+                    ctx.drawImage(img,0,0,w,h);
+                    canvas.toBlob(b=>{
+                        if(b.size > 400*1024){ canvas.toBlob(b2=>resolve(b2),'image/jpeg',0.45); }
+                        else resolve(b);
+                    }, 'image/jpeg', 0.6);
+                };
+            };
+            fr.readAsDataURL(file);
+        });
+        const dataUrl = await new Promise(res=>{ const r=new FileReader(); r.onload=e=>res(e.target.result); r.readAsDataURL(blob); });
+        return dataUrl;
+    }
+
+    for(let i=0;i<photos.length;i++){
+        if(!photos[i].file) continue;
+        const dataUrl = await toDataURLCompressed(photos[i].file);
+        if(!dataUrl) continue;
+
+        const row = Math.floor(i / perRow);
+        const col = i % perRow;
+        const x = xStart + col*(imageSize + gapH);
+        const yImg = y + row*(imageSize + gapV + 10);
+
+        if(yImg + imageSize + 20 > pageHeight - bottomMargin){
+            doc.addPage(); doc.rect(10,10,pageWidth-20,pageHeight-20); y = 20;
+        }
+
+        doc.setDrawColor(0,0,0); doc.setLineWidth(0.4);
+        doc.rect(x-0.4, yImg-0.4, imageSize+0.8, imageSize+0.8);
+        doc.addImage(dataUrl, 'JPEG', x, yImg, imageSize, imageSize);
+
+        const cap = `Figure ${i+1} : ${photos[i].caption||''}`;
+        doc.setFont("Helvetica","italic"); doc.setTextColor(0,100,0); doc.setFontSize(11);
+        const capW = doc.getTextWidth(cap);
+        doc.text(cap, x + imageSize/2 - capW/2, yImg + imageSize + 7);
+        doc.setTextColor(0,0,0);
+    }
+
+    const endText = "Voir rapport et enlever les réserves";
+    doc.setTextColor(255,0,0); doc.setFontSize(12);
+    const endW = doc.getTextWidth(endText);
+    doc.text(endText, (pageWidth - endW)/2, pageHeight - bottomMargin);
+
+    generatedPdfBlob = doc.output('blob');
+    $('previewPdfButton').style.display = 'inline-block';
+    $('downloadPdfButton').style.display = 'inline-block';
+    alert('PDF généré avec succès !');
+});
+
+/* Aperçu PDF */
+$('previewPdfButton').addEventListener('click', ()=>{
+    if(!generatedPdfBlob){ alert("Veuillez d'abord générer le PDF."); return; }
+    const url = URL.createObjectURL(generatedPdfBlob);
+    const loadingTask = pdfjsLib.getDocument(url);
+    loadingTask.promise.then(pdf=>{
+        const wrap = $('pdfImages'); wrap.innerHTML = '';
+        show('pdfPreview');
+        const renderPage = pageNumber=>{
+            pdf.getPage(pageNumber).then(page=>{
+                const scale = 1.4, viewport = page.getViewport({scale});
+                const canvas = document.createElement('canvas'), ctx = canvas.getContext('2d');
+                canvas.width = viewport.width; canvas.height = viewport.height;
+                page.render({canvasContext:ctx, viewport}).promise.then(()=>{
+                    const img = document.createElement('img'); img.src = canvas.toDataURL('image/png');
+                    wrap.appendChild(img);
+                    if(pageNumber < pdf.numPages) renderPage(pageNumber+1);
+                });
+            });
+        };
+        renderPage(1);
+        URL.revokeObjectURL(url);
+    });
+});
+
+/* Téléchargement PDF */
+$('downloadPdfButton').addEventListener('click', ()=>{
+    if(!generatedPdfBlob){ alert("Aucun PDF à télécharger."); return; }
+    const url = URL.createObjectURL(generatedPdfBlob);
+    const a = document.createElement('a');
+    const d = new Date();
+    const dstr = d.toLocaleDateString('fr-FR',{year:'numeric',month:'2-digit',day:'2-digit'}).replaceAll('/','-');
+    a.href = url; a.download = `Reception_${dstr}.pdf`;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+});
+</script>
+</body>
+</html>
